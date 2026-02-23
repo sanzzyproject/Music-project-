@@ -1,6 +1,6 @@
 {
-  "name": "Lyrics Music",
-  "short_name": "Lyrics Music",
+  "name": "Music Player",
+  "short_name": "Music Player",
   "description": "Aplikasi Lyrics Music Moderen by SANN404 FORUM",
   "start_url": "/",
   "display": "standalone",
