@@ -81,7 +81,7 @@ function onPlayerStateChange(event) {
         stopProgressBar();
         if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'none';
         
-        // Fitur Auto-play lagu selanjutnya (berdasarkan artis)
+        // Fitur Auto-play lagu selanjutnya
         playNextSimilarSong();
     }
 }
@@ -114,14 +114,12 @@ async function playNextSimilarSong() {
         const result = await response.json();
         
         if (result.status === 'success' && result.data.length > 0) {
-            // Filter agar lagu yang sama tidak diputar ulang berurutan
             const relatedSongs = result.data.filter(t => t.videoId !== currentTrack.videoId);
             if (relatedSongs.length > 0) {
-                // Pilih lagu secara acak dari hasil yang relevan
                 const nextTrack = relatedSongs[Math.floor(Math.random() * relatedSongs.length)];
                 
                 let img = nextTrack.thumbnail ? nextTrack.thumbnail : (nextTrack.img ? nextTrack.img : 'https://placehold.co/140x140/282828/FFFFFF?text=Music');
-                img = getHighResImage(img); // UPDATE: Resolusi gambar tinggi
+                img = getHighResImage(img);
                 const artist = nextTrack.artist ? nextTrack.artist : 'Unknown';
                 const trackData = encodeURIComponent(JSON.stringify({videoId: nextTrack.videoId, title: nextTrack.title, artist: artist, img: img}));
                 
@@ -137,19 +135,16 @@ function playMusic(videoId, encodedTrackData) {
     currentTrack = JSON.parse(decodeURIComponent(encodedTrackData));
     checkIfLiked(currentTrack.videoId);
 
-    // Update UI Mini Player
     document.getElementById('miniPlayer').style.display = 'flex';
     document.getElementById('miniPlayerImg').src = currentTrack.img;
     document.getElementById('miniPlayerTitle').innerText = currentTrack.title;
     document.getElementById('miniPlayerArtist').innerText = currentTrack.artist;
 
-    // Update UI Full Player
     document.getElementById('playerArt').src = currentTrack.img;
     document.getElementById('playerTitle').innerText = currentTrack.title;
     document.getElementById('playerArtist').innerText = currentTrack.artist;
     document.getElementById('playerBg').style.backgroundImage = `url('${currentTrack.img}')`;
 
-    // Set Background Play Control
     updateMediaSession();
 
     if (ytPlayer && ytPlayer.loadVideoById) {
@@ -236,10 +231,8 @@ function switchView(viewName) {
 // --- 4. RENDER KOMPONEN UI ---
 const dotsSvg = '<svg class="dots-icon" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path></svg>';
 
-// Helper untuk fix kualitas gambar blur menjadi HD
 function getHighResImage(url) {
     if (!url) return url;
-    // Upgrade dimensi thumbnail youtube menjadi 512x512
     if (url.match(/=w\d+-h\d+/)) {
         return url.replace(/=w\d+-h\d+[^&]*/g, '=w512-h512-l90-rj');
     }
@@ -248,7 +241,7 @@ function getHighResImage(url) {
 
 function createListHTML(track) {
     let img = track.thumbnail ? track.thumbnail : (track.img ? track.img : 'https://placehold.co/48x48/282828/FFFFFF?text=Music');
-    img = getHighResImage(img); // UPDATE: Resolusi gambar tinggi
+    img = getHighResImage(img); 
     const artist = track.artist ? track.artist : 'Unknown';
     const trackData = encodeURIComponent(JSON.stringify({videoId: track.videoId, title: track.title, artist: artist, img: img}));
     
@@ -266,7 +259,7 @@ function createListHTML(track) {
 
 function createCardHTML(track, isArtist = false) {
     let img = track.thumbnail ? track.thumbnail : (track.img ? track.img : 'https://placehold.co/140x140/282828/FFFFFF?text=Music');
-    img = getHighResImage(img); // UPDATE: Resolusi gambar tinggi
+    img = getHighResImage(img); 
     const artist = track.artist ? track.artist : 'Unknown';
     const trackData = encodeURIComponent(JSON.stringify({videoId: track.videoId, title: track.title, artist: artist, img: img}));
     
@@ -287,8 +280,8 @@ async function fetchAndRender(query, containerId, formatType, isArtist = false) 
         const response = await fetch(`/api/search?query=${encodeURIComponent(query)}`);
         const result = await response.json();
         if (result.status === 'success') {
-            // UPDATE: Batasi list Sering Kamu Dengarkan menjadi 5 saja
-            let limit = containerId === 'recentList' ? 5 : (formatType === 'list' ? 5 : 8);
+            // Membatasi recentList hanya 4 lagu saja, yang lain tetap 8
+            let limit = containerId === 'recentList' ? 4 : (formatType === 'list' ? 4 : 8);
             let tracks = result.data.slice(0, limit);
             let html = '';
             tracks.forEach(t => html += formatType === 'list' ? createListHTML(t) : createCardHTML(t, isArtist));
@@ -306,6 +299,11 @@ function loadHomeData() {
     fetchAndRender('lagu viral terbaru 2026', 'rowBaru', 'card');
     fetchAndRender('lagu fyp tiktok viral jedag jedug', 'rowTiktok', 'card');
     fetchAndRender('penyanyi pop indonesia paling hits', 'rowArtists', 'card', true);
+    
+    // 3 Kategori Tambahan Baru
+    fetchAndRender('hit terpopuler hari ini', 'rowHitsHariIni', 'card');
+    fetchAndRender('playlist dibuat untuk tiktok', 'rowUntukTiktok', 'card');
+    fetchAndRender('album dan single populer', 'rowAlbumSingle', 'card');
 }
 
 function renderSearchCategories() {
@@ -369,7 +367,7 @@ async function openArtistView(artistName) {
             if(result.data.length > 0) {
                 const firstTrack = result.data[0];
                 let img = firstTrack.thumbnail ? firstTrack.thumbnail : (firstTrack.img ? firstTrack.img : 'https://placehold.co/48x48/282828/FFFFFF?text=Music');
-                img = getHighResImage(img); // UPDATE: Resolusi gambar tinggi
+                img = getHighResImage(img);
                 const artist = firstTrack.artist ? firstTrack.artist : 'Unknown';
                 const trackData = encodeURIComponent(JSON.stringify({videoId: firstTrack.videoId, title: firstTrack.title, artist: artist, img: img}));
                 document.querySelector('.artist-play-btn').setAttribute('onclick', `playMusic('${firstTrack.videoId}', '${trackData}')`);
@@ -387,10 +385,10 @@ function checkIfLiked(videoId) {
         const btnLikeSong = document.getElementById('btnLikeSong');
         if(request.result) {
             btnLikeSong.classList.add('liked');
-            btnLikeSong.style.fill = '#1ed760'; // Mengganti inline style ke hijau
+            btnLikeSong.style.fill = '#1ed760'; 
         } else {
             btnLikeSong.classList.remove('liked');
-            btnLikeSong.style.fill = 'white'; // Mengembalikan inline style ke putih
+            btnLikeSong.style.fill = 'white'; 
         }
     };
 }
@@ -406,11 +404,11 @@ function toggleLike() {
         if(getReq.result) {
             store.delete(currentTrack.videoId);
             btnLikeSong.classList.remove('liked');
-            btnLikeSong.style.fill = 'white'; // Hapus Like -> Putih
+            btnLikeSong.style.fill = 'white'; 
         } else {
             store.put(currentTrack);
             btnLikeSong.classList.add('liked');
-            btnLikeSong.style.fill = '#1ed760'; // Tambah Like -> Hijau
+            btnLikeSong.style.fill = '#1ed760'; 
         }
         renderLibraryUI();
     };
