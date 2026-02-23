@@ -1,4 +1,3 @@
 fastapi
 ytmusicapi
-yt-dlp
 uvicorn
