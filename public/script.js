@@ -36,21 +36,12 @@ request.onsuccess = function(e) { db = e.target.result; renderLibraryUI(); };
 // --- 2. YOUTUBE IFRAME API & PLAYER LOGIC ---
 let ytPlayer;
 let isPlaying = false;
-// UPDATE: Variabel baru untuk melacak niat user (apakah user ingin play atau pause)
-let userIntendsToPlay = false; 
 let currentTrack = null;
 let progressInterval;
 
 function onYouTubeIframeAPIReady() {
     ytPlayer = new YT.Player('youtube-player', {
         height: '0', width: '0',
-        playerVars: {
-            'playsinline': 1,
-            'autoplay': 1,
-            'controls': 0,
-            'disablekb': 1,
-            'fs': 0
-        },
         events: {
             'onReady': onPlayerReady,
             'onStateChange': onPlayerStateChange
@@ -66,29 +57,18 @@ function onPlayerStateChange(event) {
     const mainPlayBtn = document.getElementById('mainPlayBtn');
     const miniPlayBtn = document.getElementById('miniPlayBtn');
     
+    // Play Path
     const playIconPath = "M8 5v14l11-7z";
+    // Pause Path
     const pauseIconPath = "M6 19h4V5H6v14zm8-14v14h4V5h-4z";
 
     if (event.data == YT.PlayerState.PLAYING) {
         isPlaying = true;
-        // UPDATE: Pastikan niat user tercatat sebagai 'ingin memutar'
-        userIntendsToPlay = true; 
         mainPlayBtn.innerHTML = `<path d="${pauseIconPath}"></path>`;
         miniPlayBtn.innerHTML = `<path d="${pauseIconPath}"></path>`;
         startProgressBar();
         if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
     } else if (event.data == YT.PlayerState.PAUSED) {
-        // UPDATE PENTING UNTUK BACKGROUND PLAY:
-        // Jika player pause, TAPI user sebenarnya masih ingin memutar (userIntendsToPlay == true),
-        // berarti browser yang mem-pause otomatis saat diminimize.
-        // Kita PAKSA play lagi segera!
-        if (userIntendsToPlay) {
-            console.log("Browser mencoba pause otomatis, memaksa resume untuk background play.");
-            ytPlayer.playVideo();
-            return; // Keluar dari fungsi, jangan ubah UI jadi pause
-        }
-
-        // Jika sampai sini, berarti pause memang keinginan user (tombol pause ditekan)
         isPlaying = false;
         mainPlayBtn.innerHTML = `<path d="${playIconPath}"></path>`;
         miniPlayBtn.innerHTML = `<path d="${playIconPath}"></path>`;
@@ -96,8 +76,6 @@ function onPlayerStateChange(event) {
         if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
     } else if (event.data == YT.PlayerState.ENDED) {
         isPlaying = false;
-        // UPDATE: Saat lagu habis, niat play masih ada untuk lagu berikutnya
-        userIntendsToPlay = true;
         mainPlayBtn.innerHTML = `<path d="${playIconPath}"></path>`;
         miniPlayBtn.innerHTML = `<path d="${playIconPath}"></path>`;
         stopProgressBar();
@@ -152,9 +130,6 @@ function playMusic(videoId, encodedTrackData) {
     currentTrack = JSON.parse(decodeURIComponent(encodedTrackData));
     checkIfLiked(currentTrack.videoId);
 
-    // UPDATE: Saat memulai lagu baru, niat user adalah memutar
-    userIntendsToPlay = true;
-
     document.getElementById('miniPlayer').style.display = 'flex';
     document.getElementById('miniPlayerImg').src = currentTrack.img;
     document.getElementById('miniPlayerTitle').innerText = currentTrack.title;
@@ -179,12 +154,8 @@ function playMusic(videoId, encodedTrackData) {
 function togglePlay() {
     if (!ytPlayer) return;
     if (isPlaying) {
-        // UPDATE: User menekan tombol pause, catat niatnya
-        userIntendsToPlay = false;
         ytPlayer.pauseVideo();
     } else {
-        // UPDATE: User menekan tombol play, catat niatnya
-        userIntendsToPlay = true;
         ytPlayer.playVideo();
     }
 }
@@ -530,7 +501,7 @@ function openPlaylistView(id) {
 
     if (id === 'liked') {
         document.getElementById('playlistNameDisplay').innerText = "Lagu yang Disukai";
-        document.getElementById('playlistImageDisplay').src = "https://via.placeholder.com/240/450af5/ffffff?text=Like";
+        document.getElementById('playlistImageDisplay').src = "1ced33a183cb33692d94252ad74fa4d9 (1).jpg";
         
         const tx = db.transaction("liked_songs", "readonly");
         const req = tx.objectStore("liked_songs").getAll();
