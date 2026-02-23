@@ -81,12 +81,10 @@ function onPlayerStateChange(event) {
         stopProgressBar();
         if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'none';
         
-        // Fitur Auto-play lagu selanjutnya
         playNextSimilarSong();
     }
 }
 
-// Update UI dan integrasi Media Session API untuk background play
 function updateMediaSession() {
     if ('mediaSession' in navigator && currentTrack) {
         navigator.mediaSession.metadata = new MediaMetadata({
@@ -106,7 +104,6 @@ function updateMediaSession() {
     }
 }
 
-// Fitur Auto-play lagu dengan genre/artis yang sama
 async function playNextSimilarSong() {
     if (!currentTrack) return;
     try {
@@ -126,9 +123,7 @@ async function playNextSimilarSong() {
                 playMusic(nextTrack.videoId, trackData);
             }
         }
-    } catch (error) {
-        console.error("Gagal auto-play lagu selanjutnya", error);
-    }
+    } catch (error) {}
 }
 
 function playMusic(videoId, encodedTrackData) {
@@ -213,6 +208,18 @@ function seekTo(value) {
     }
 }
 
+// --- CUSTOM TOAST NOTIFICATION ---
+let toastTimeout;
+function showToast(message) {
+    const toast = document.getElementById('customToast');
+    toast.innerText = message;
+    toast.classList.add('show');
+    clearTimeout(toastTimeout);
+    toastTimeout = setTimeout(() => {
+        toast.classList.remove('show');
+    }, 3000);
+}
+
 // --- 3. SISTEM NAVIGASI ---
 function switchView(viewName) {
     document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
@@ -275,7 +282,6 @@ function createCardHTML(track, isArtist = false) {
     `;
 }
 
-// Global set untuk melacak lagu yang sudah di-render di Home agar tidak duplikat
 let homeDisplayedVideoIds = new Set();
 
 async function fetchAndRender(query, containerId, formatType, isArtist = false, isHome = false) {
@@ -287,7 +293,6 @@ async function fetchAndRender(query, containerId, formatType, isArtist = false, 
             let limit = containerId === 'recentList' ? 4 : (formatType === 'list' ? 4 : 8);
             let tracks = [];
             
-            // Filter cerdas untuk mencegah lagu duplikat di beranda
             for (let t of result.data) {
                 if (isHome) {
                     if (!homeDisplayedVideoIds.has(t.videoId)) {
@@ -308,7 +313,6 @@ async function fetchAndRender(query, containerId, formatType, isArtist = false, 
 }
 
 function loadHomeData() {
-    // Bersihkan memori pelacakan duplikat setiap kali home di-load
     homeDisplayedVideoIds.clear();
     
     fetchAndRender('lagu indonesia hits terbaru', 'recentList', 'list', false, true);
@@ -320,7 +324,6 @@ function loadHomeData() {
     fetchAndRender('lagu fyp tiktok viral jedag jedug', 'rowTiktok', 'card', false, true);
     fetchAndRender('penyanyi pop indonesia paling hits', 'rowArtists', 'card', true, true);
     
-    // 3 Kategori Tambahan Baru
     fetchAndRender('hit terpopuler hari ini', 'rowHitsHariIni', 'card', false, true);
     fetchAndRender('playlist dibuat untuk tiktok', 'rowUntukTiktok', 'card', false, true);
     fetchAndRender('album dan single populer', 'rowAlbumSingle', 'card', false, true);
@@ -329,7 +332,6 @@ function loadHomeData() {
 function renderSearchCategories() {
     const categories = [
         { title: 'Dibuat Untuk Kamu', color: '#8d67ab', img: 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=100&q=80' },
-        // Memperbaiki link gambar yang rusak pada kategori Rilis Mendatang
         { title: 'Rilis Mendatang', color: '#188653', img: 'https://images.unsplash.com/photo-1507838153414-b4b713384a76?w=100&q=80' },
         { title: 'Rilis Baru', color: '#739c18', img: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=100&q=80' },
         { title: 'Ramadan', color: '#188653', img: 'https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?w=100&q=80' },
@@ -364,7 +366,6 @@ document.getElementById('searchInput').addEventListener('input', (e) => {
             const result = await response.json();
             if (result.status === 'success') {
                 let html = '';
-                // Set parameter isHome menjadi false untuk fungsi search
                 result.data.forEach(t => html += createListHTML(t));
                 document.getElementById('searchResults').innerHTML = html;
             }
@@ -372,7 +373,6 @@ document.getElementById('searchInput').addEventListener('input', (e) => {
     }, 800);
 });
 
-// --- 5. FITUR HALAMAN ARTIS ---
 async function openArtistView(artistName) {
     document.getElementById('artistNameDisplay').innerText = artistName;
     document.getElementById('artistTracksContainer').innerHTML = '<div style="color:var(--text-sub); text-align:center;">Memuat lagu artis...</div>';
@@ -397,8 +397,6 @@ async function openArtistView(artistName) {
         }
     } catch(e) {}
 }
-
-// --- 6. LOGIKA KOLEKSI, LIKE & PLAYLIST ---
 
 function checkIfLiked(videoId) {
     const tx = db.transaction("liked_songs", "readonly");
@@ -609,9 +607,9 @@ function addTrackToPlaylist(playlistId) {
         if(!p.tracks.find(t => t.videoId === currentTrack.videoId)) {
             p.tracks.push(currentTrack);
             store.put(p);
-            alert('Lagu berhasil ditambahkan ke playlist ' + p.name + '!');
+            showToast('Ditambahkan ke ' + p.name); // Notifikasi Modern
         } else {
-            alert('Lagu ini sudah ada di playlist ' + p.name + '.');
+            showToast('Sudah ada di ' + p.name); // Notifikasi Modern
         }
         closeAddToPlaylistModal();
     };
