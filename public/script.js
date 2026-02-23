@@ -501,7 +501,7 @@ function openPlaylistView(id) {
 
     if (id === 'liked') {
         document.getElementById('playlistNameDisplay').innerText = "Lagu yang Disukai";
-        document.getElementById('playlistImageDisplay').src = "https://via.placeholder.com/240/450af5/ffffff?text=Like";
+        document.getElementById('playlistImageDisplay').src = "452e0bbf6667983c7c89b190247e1daf.jpg";
         
         const tx = db.transaction("liked_songs", "readonly");
         const req = tx.objectStore("liked_songs").getAll();
