@@ -1,3 +1,15 @@
+// public/script.js
+
+// --- 0.1 INJECT YOUTUBE IFRAME API SECARA DINAMIS (ANTI GAGAL) ---
+const tag = document.createElement('script');
+tag.src = "https://www.youtube.com/iframe_api";
+const firstScriptTag = document.getElementsByTagName('script')[0];
+if(firstScriptTag) {
+    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+} else {
+    document.head.appendChild(tag);
+}
+
 // --- 0. REGISTER PWA & CUSTOM INSTALL BUTTON ---
 let deferredPrompt;
 if ('serviceWorker' in navigator) {
@@ -41,16 +53,27 @@ let progressInterval;
 
 function onYouTubeIframeAPIReady() {
     ytPlayer = new YT.Player('youtube-player', {
-        height: '0', width: '0',
+        height: '0', 
+        width: '0',
+        playerVars: {
+            'playsinline': 1, // Penting untuk background play di Mobile
+            'autoplay': 1
+        },
         events: {
             'onReady': onPlayerReady,
-            'onStateChange': onPlayerStateChange
+            'onStateChange': onPlayerStateChange,
+            'onError': onPlayerError
         }
     });
 }
 
 function onPlayerReady(event) {
     console.log("YouTube Player is ready");
+}
+
+function onPlayerError(event) {
+    console.error("Error memutar video. Lanjut ke lagu berikutnya...", event.data);
+    playNextSimilarSong(); // Jika lagu di-block/error, otomatis lanjut
 }
 
 function onPlayerStateChange(event) {
@@ -81,28 +104,32 @@ function onPlayerStateChange(event) {
         stopProgressBar();
         if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'none';
         
-        // Fitur Auto-play lagu selanjutnya (berdasarkan artis)
+        // Fitur Auto-play lagu selanjutnya saat lagu habis
         playNextSimilarSong();
     }
 }
 
-// Update UI dan integrasi Media Session API untuk background play
+// Update UI dan integrasi Media Session API untuk background play (Aman dari crash)
 function updateMediaSession() {
     if ('mediaSession' in navigator && currentTrack) {
-        navigator.mediaSession.metadata = new MediaMetadata({
-            title: currentTrack.title,
-            artist: currentTrack.artist,
-            artwork: [
-                { src: currentTrack.img, sizes: '96x96', type: 'image/png' },
-                { src: currentTrack.img, sizes: '128x128', type: 'image/png' },
-                { src: currentTrack.img, sizes: '256x256', type: 'image/png' },
-                { src: currentTrack.img, sizes: '512x512', type: 'image/png' }
-            ]
-        });
+        try {
+            // Gunakan gambar valid atau kosongkan jika tidak ada agar tidak crash di mobile
+            const artworkUrl = currentTrack.img && currentTrack.img.startsWith('http') ? currentTrack.img : 'https://placehold.co/512x512/282828/FFFFFF?text=Music';
+            
+            navigator.mediaSession.metadata = new MediaMetadata({
+                title: currentTrack.title || 'Unknown Title',
+                artist: currentTrack.artist || 'Unknown Artist',
+                artwork: [
+                    { src: artworkUrl, sizes: '512x512', type: 'image/png' }
+                ]
+            });
 
-        navigator.mediaSession.setActionHandler('play', function() { togglePlay(); });
-        navigator.mediaSession.setActionHandler('pause', function() { togglePlay(); });
-        navigator.mediaSession.setActionHandler('nexttrack', function() { playNextSimilarSong(); });
+            navigator.mediaSession.setActionHandler('play', function() { togglePlay(); });
+            navigator.mediaSession.setActionHandler('pause', function() { togglePlay(); });
+            navigator.mediaSession.setActionHandler('nexttrack', function() { playNextSimilarSong(); });
+        } catch (error) {
+            console.warn("Background MediaSession diabaikan karena browser tidak full support:", error);
+        }
     }
 }
 
@@ -113,8 +140,8 @@ async function playNextSimilarSong() {
         const response = await fetch(`/api/search?query=${encodeURIComponent(currentTrack.artist + " official audio")}`);
         const result = await response.json();
         
-        if (result.status === 'success' && result.data.length > 0) {
-            // Filter agar lagu yang sama tidak diputar ulang berurutan
+        if (result.status === 'success' && result.data && result.data.length > 0) {
+            // Filter agar lagu yang sama tidak diputar ulang
             const relatedSongs = result.data.filter(t => t.videoId !== currentTrack.videoId);
             if (relatedSongs.length > 0) {
                 // Pilih lagu secara acak dari hasil yang relevan
@@ -151,8 +178,17 @@ function playMusic(videoId, encodedTrackData) {
     // Set Background Play Control
     updateMediaSession();
 
-    if (ytPlayer && ytPlayer.loadVideoById) {
+    // Pastikan ytPlayer sudah siap sebelum memanggil loadVideoById
+    if (ytPlayer && typeof ytPlayer.loadVideoById === 'function') {
         ytPlayer.loadVideoById(videoId);
+    } else {
+        // Jika diklik terlalu cepat sebelum Iframe siap, tunggu bentar
+        const checkReady = setInterval(() => {
+            if (ytPlayer && typeof ytPlayer.loadVideoById === 'function') {
+                ytPlayer.loadVideoById(videoId);
+                clearInterval(checkReady);
+            }
+        }, 500);
     }
     
     document.getElementById('progressBar').value = 0;
@@ -282,15 +318,35 @@ async function fetchAndRender(query, containerId, formatType, isArtist = false) 
     } catch (error) {}
 }
 
-function loadHomeData() {
-    fetchAndRender('lagu indonesia hits terbaru', 'recentList', 'list');
-    fetchAndRender('lagu pop indonesia rilis terbaru anyar', 'rowAnyar', 'card');
-    fetchAndRender('lagu ceria gembira semangat', 'rowGembira', 'card');
-    fetchAndRender('top 50 indonesia playlist update', 'rowCharts', 'card');
-    fetchAndRender('lagu galau sedih indonesia terpopuler', 'rowGalau', 'card');
-    fetchAndRender('lagu viral terbaru 2026', 'rowBaru', 'card');
-    fetchAndRender('lagu fyp tiktok viral jedag jedug', 'rowTiktok', 'card');
-    fetchAndRender('penyanyi pop indonesia paling hits', 'rowArtists', 'card', true);
+async function loadHomeData() {
+    try {
+        // PERUBAHAN NO 1: Fetch gabungan 1 kali dari backend caching agar kuat ribuan user
+        const response = await fetch('/api/home');
+        const result = await response.json();
+        
+        if (result.status === 'success' && result.data) {
+            const data = result.data;
+            
+            const renderHTML = (tracks, formatType, isArtist = false) => {
+                let html = '';
+                if(tracks) {
+                    tracks.forEach(t => html += formatType === 'list' ? createListHTML(t) : createCardHTML(t, isArtist));
+                }
+                return html;
+            };
+
+            document.getElementById('recentList').innerHTML = renderHTML(data.recent, 'list');
+            document.getElementById('rowAnyar').innerHTML = renderHTML(data.anyar, 'card');
+            document.getElementById('rowGembira').innerHTML = renderHTML(data.gembira, 'card');
+            document.getElementById('rowCharts').innerHTML = renderHTML(data.charts, 'card');
+            document.getElementById('rowGalau').innerHTML = renderHTML(data.galau, 'card');
+            document.getElementById('rowBaru').innerHTML = renderHTML(data.baru, 'card');
+            document.getElementById('rowTiktok').innerHTML = renderHTML(data.tiktok, 'card');
+            document.getElementById('rowArtists').innerHTML = renderHTML(data.artists, 'card', true);
+        }
+    } catch (error) {
+        console.error("Gagal memuat data home gabungan", error);
+    }
 }
 
 function renderSearchCategories() {
@@ -364,7 +420,6 @@ async function openArtistView(artistName) {
 
 // --- 6. LOGIKA KOLEKSI, LIKE & PLAYLIST ---
 
-// FIX BUG LIKE: Menyesuaikan manipulasi warna SVG agar bekerja pada style inline HTML
 function checkIfLiked(videoId) {
     const tx = db.transaction("liked_songs", "readonly");
     const request = tx.objectStore("liked_songs").get(videoId);
