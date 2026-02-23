@@ -42,6 +42,14 @@ let progressInterval;
 function onYouTubeIframeAPIReady() {
     ytPlayer = new YT.Player('youtube-player', {
         height: '0', width: '0',
+        // UPDATE: Menambahkan playerVars untuk mendukung background play di mobile
+        playerVars: {
+            'playsinline': 1, // Kunci agar tidak pause saat keluar/minimize
+            'autoplay': 1,
+            'controls': 0,
+            'disablekb': 1,
+            'fs': 0
+        },
         events: {
             'onReady': onPlayerReady,
             'onStateChange': onPlayerStateChange
