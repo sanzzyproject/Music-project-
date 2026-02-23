@@ -67,11 +67,68 @@ function onPlayerStateChange(event) {
         mainPlayBtn.innerHTML = `<path d="${pauseIconPath}"></path>`;
         miniPlayBtn.innerHTML = `<path d="${pauseIconPath}"></path>`;
         startProgressBar();
-    } else if (event.data == YT.PlayerState.PAUSED || event.data == YT.PlayerState.ENDED) {
+        if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
+    } else if (event.data == YT.PlayerState.PAUSED) {
         isPlaying = false;
         mainPlayBtn.innerHTML = `<path d="${playIconPath}"></path>`;
         miniPlayBtn.innerHTML = `<path d="${playIconPath}"></path>`;
         stopProgressBar();
+        if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+    } else if (event.data == YT.PlayerState.ENDED) {
+        isPlaying = false;
+        mainPlayBtn.innerHTML = `<path d="${playIconPath}"></path>`;
+        miniPlayBtn.innerHTML = `<path d="${playIconPath}"></path>`;
+        stopProgressBar();
+        if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'none';
+        
+        // Fitur Auto-play lagu selanjutnya (berdasarkan artis)
+        playNextSimilarSong();
+    }
+}
+
+// Update UI dan integrasi Media Session API untuk background play
+function updateMediaSession() {
+    if ('mediaSession' in navigator && currentTrack) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+            title: currentTrack.title,
+            artist: currentTrack.artist,
+            artwork: [
+                { src: currentTrack.img, sizes: '96x96', type: 'image/png' },
+                { src: currentTrack.img, sizes: '128x128', type: 'image/png' },
+                { src: currentTrack.img, sizes: '256x256', type: 'image/png' },
+                { src: currentTrack.img, sizes: '512x512', type: 'image/png' }
+            ]
+        });
+
+        navigator.mediaSession.setActionHandler('play', function() { togglePlay(); });
+        navigator.mediaSession.setActionHandler('pause', function() { togglePlay(); });
+        navigator.mediaSession.setActionHandler('nexttrack', function() { playNextSimilarSong(); });
+    }
+}
+
+// Fitur Auto-play lagu dengan genre/artis yang sama
+async function playNextSimilarSong() {
+    if (!currentTrack) return;
+    try {
+        const response = await fetch(`/api/search?query=${encodeURIComponent(currentTrack.artist + " official audio")}`);
+        const result = await response.json();
+        
+        if (result.status === 'success' && result.data.length > 0) {
+            // Filter agar lagu yang sama tidak diputar ulang berurutan
+            const relatedSongs = result.data.filter(t => t.videoId !== currentTrack.videoId);
+            if (relatedSongs.length > 0) {
+                // Pilih lagu secara acak dari hasil yang relevan
+                const nextTrack = relatedSongs[Math.floor(Math.random() * relatedSongs.length)];
+                
+                const img = nextTrack.thumbnail ? nextTrack.thumbnail : (nextTrack.img ? nextTrack.img : 'https://placehold.co/140x140/282828/FFFFFF?text=Music');
+                const artist = nextTrack.artist ? nextTrack.artist : 'Unknown';
+                const trackData = encodeURIComponent(JSON.stringify({videoId: nextTrack.videoId, title: nextTrack.title, artist: artist, img: img}));
+                
+                playMusic(nextTrack.videoId, trackData);
+            }
+        }
+    } catch (error) {
+        console.error("Gagal auto-play lagu selanjutnya", error);
     }
 }
 
@@ -91,11 +148,13 @@ function playMusic(videoId, encodedTrackData) {
     document.getElementById('playerArtist').innerText = currentTrack.artist;
     document.getElementById('playerBg').style.backgroundImage = `url('${currentTrack.img}')`;
 
+    // Set Background Play Control
+    updateMediaSession();
+
     if (ytPlayer && ytPlayer.loadVideoById) {
         ytPlayer.loadVideoById(videoId);
     }
     
-    // Update progress bar max based on duration if possible, default to 100 for percentage
     document.getElementById('progressBar').value = 0;
     document.getElementById('currentTime').innerText = "0:00";
     document.getElementById('totalTime').innerText = "0:00";
@@ -135,7 +194,6 @@ function startProgressBar() {
                 const percent = (current / duration) * 100;
                 const progressBar = document.getElementById('progressBar');
                 progressBar.value = percent;
-                // Add background gradient logic for modern range slider
                 progressBar.style.background = `linear-gradient(to right, white ${percent}%, rgba(255,255,255,0.2) ${percent}%)`;
                 
                 document.getElementById('currentTime').innerText = formatTime(current);
@@ -293,7 +351,6 @@ async function openArtistView(artistName) {
             result.data.forEach(track => { html += createListHTML(track); });
             document.getElementById('artistTracksContainer').innerHTML = html;
             
-            // Set for play button
             if(result.data.length > 0) {
                 const firstTrack = result.data[0];
                 const img = firstTrack.thumbnail ? firstTrack.thumbnail : (firstTrack.img ? firstTrack.img : 'https://placehold.co/48x48/282828/FFFFFF?text=Music');
@@ -306,13 +363,20 @@ async function openArtistView(artistName) {
 }
 
 // --- 6. LOGIKA KOLEKSI, LIKE & PLAYLIST ---
+
+// FIX BUG LIKE: Menyesuaikan manipulasi warna SVG agar bekerja pada style inline HTML
 function checkIfLiked(videoId) {
     const tx = db.transaction("liked_songs", "readonly");
     const request = tx.objectStore("liked_songs").get(videoId);
     request.onsuccess = function() {
         const btnLikeSong = document.getElementById('btnLikeSong');
-        if(request.result) btnLikeSong.classList.add('liked');
-        else btnLikeSong.classList.remove('liked');
+        if(request.result) {
+            btnLikeSong.classList.add('liked');
+            btnLikeSong.style.fill = '#1ed760'; // Mengganti inline style ke hijau
+        } else {
+            btnLikeSong.classList.remove('liked');
+            btnLikeSong.style.fill = 'white'; // Mengembalikan inline style ke putih
+        }
     };
 }
 
@@ -327,9 +391,11 @@ function toggleLike() {
         if(getReq.result) {
             store.delete(currentTrack.videoId);
             btnLikeSong.classList.remove('liked');
+            btnLikeSong.style.fill = 'white'; // Hapus Like -> Putih
         } else {
             store.put(currentTrack);
             btnLikeSong.classList.add('liked');
+            btnLikeSong.style.fill = '#1ed760'; // Tambah Like -> Hijau
         }
         renderLibraryUI();
     };
