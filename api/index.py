@@ -1,32 +1,37 @@
-from fastapi import FastAPI, Query
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI
 from ytmusicapi import YTMusic
-import yt_dlp
-import os
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
-yt = YTMusic()
+
+# Mengizinkan frontend mengambil data dari API
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Inisialisasi ytmusic tanpa login (bisa search public data)
+ytmusic = YTMusic()
 
 @app.get("/api/search")
-async def search(q: str = Query(...)):
+def search_music(query: str):
     try:
-        # Menggunakan SearchMixin.search() sesuai dokumentasi
-        results = yt.search(q, filter="songs")
-        return results
+        # Mencari spesifik tipe 'songs' agar yang muncul hanya lagu
+        search_results = ytmusic.search(query, filter="songs", limit=12)
+        
+        # Membersihkan data agar mudah dibaca oleh frontend
+        cleaned_results = []
+        for item in search_results:
+            if 'videoId' in item:
+                cleaned_results.append({
+                    "videoId": item['videoId'],
+                    "title": item.get('title', 'Unknown Title'),
+                    "artist": item.get('artists', [{'name': 'Unknown Artist'}])[0]['name'],
+                    "thumbnail": item['thumbnails'][-1]['url'] if 'thumbnails' in item else ''
+                })
+        
+        return {"status": "success", "data": cleaned_results}
     except Exception as e:
-        return JSONResponse(status_code=500, content={"error": str(e)})
-
-@app.get("/api/stream")
-async def stream(id: str = Query(...)):
-    try:
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'quiet': True,
-            'no_warnings': True,
-        }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # Mengambil info streaming langsung dari videoId
-            info = ydl.extract_info(f"https://www.youtube.com/watch?v={id}", download=False)
-            return {"url": info['url']}
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"error": str(e)})
+        return {"status": "error", "message": str(e)}
