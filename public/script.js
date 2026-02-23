@@ -178,13 +178,13 @@ function switchView(viewName) {
 const dotsSvg = '<svg class="dots-icon" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path></svg>';
 
 function createListHTML(track) {
-    const img = track.img ? track.img : (track.thumbnails ? track.thumbnails[track.thumbnails.length - 1].url : 'https://via.placeholder.com/48?text=+');
-    const artist = track.artist ? track.artist : (track.artists ? track.artists.map(a => a.name).join(', ') : 'Unknown');
+    const img = track.thumbnail ? track.thumbnail : (track.img ? track.img : 'https://placehold.co/48x48/282828/FFFFFF?text=Music');
+    const artist = track.artist ? track.artist : 'Unknown';
     const trackData = encodeURIComponent(JSON.stringify({videoId: track.videoId, title: track.title, artist: artist, img: img}));
     
     return `
         <div class="v-item" onclick="playMusic('${track.videoId}', '${trackData}')">
-            <img src="${img}" class="v-img" onerror="this.src='https://via.placeholder.com/48?text=+'">
+            <img src="${img}" class="v-img" onerror="this.src='https://placehold.co/48x48/282828/FFFFFF?text=Music'">
             <div class="v-info">
                 <div class="v-title">${track.title}</div>
                 <div class="v-sub">${artist}</div>
@@ -195,8 +195,8 @@ function createListHTML(track) {
 }
 
 function createCardHTML(track, isArtist = false) {
-    const img = track.img ? track.img : (track.thumbnails ? track.thumbnails[track.thumbnails.length - 1].url : 'https://via.placeholder.com/140?text=+');
-    const artist = track.artist ? track.artist : (track.artists ? track.artists.map(a => a.name).join(', ') : 'Unknown');
+    const img = track.thumbnail ? track.thumbnail : (track.img ? track.img : 'https://placehold.co/140x140/282828/FFFFFF?text=Music');
+    const artist = track.artist ? track.artist : 'Unknown';
     const trackData = encodeURIComponent(JSON.stringify({videoId: track.videoId, title: track.title, artist: artist, img: img}));
     
     const clickAction = isArtist ? `openArtistView('${track.title}')` : `playMusic('${track.videoId}', '${trackData}')`;
@@ -204,7 +204,7 @@ function createCardHTML(track, isArtist = false) {
 
     return `
         <div class="h-card" onclick="${clickAction}">
-            <img src="${img}" class="${imgClass}" onerror="this.src='https://via.placeholder.com/140?text=+'">
+            <img src="${img}" class="${imgClass}" onerror="this.src='https://placehold.co/140x140/282828/FFFFFF?text=Music'">
             <div class="h-title">${track.title}</div>
             <div class="h-sub">${isArtist ? 'Artis' : artist}</div>
         </div>
@@ -296,8 +296,8 @@ async function openArtistView(artistName) {
             // Set for play button
             if(result.data.length > 0) {
                 const firstTrack = result.data[0];
-                const img = firstTrack.img ? firstTrack.img : (firstTrack.thumbnails ? firstTrack.thumbnails[firstTrack.thumbnails.length - 1].url : 'https://via.placeholder.com/48');
-                const artist = firstTrack.artist ? firstTrack.artist : (firstTrack.artists ? firstTrack.artists.map(a => a.name).join(', ') : 'Unknown');
+                const img = firstTrack.thumbnail ? firstTrack.thumbnail : (firstTrack.img ? firstTrack.img : 'https://placehold.co/48x48/282828/FFFFFF?text=Music');
+                const artist = firstTrack.artist ? firstTrack.artist : 'Unknown';
                 const trackData = encodeURIComponent(JSON.stringify({videoId: firstTrack.videoId, title: firstTrack.title, artist: artist, img: img}));
                 document.querySelector('.artist-play-btn').setAttribute('onclick', `playMusic('${firstTrack.videoId}', '${trackData}')`);
             }
