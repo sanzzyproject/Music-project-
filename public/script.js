@@ -275,14 +275,31 @@ function createCardHTML(track, isArtist = false) {
     `;
 }
 
-async function fetchAndRender(query, containerId, formatType, isArtist = false) {
+// Global set untuk melacak lagu yang sudah di-render di Home agar tidak duplikat
+let homeDisplayedVideoIds = new Set();
+
+async function fetchAndRender(query, containerId, formatType, isArtist = false, isHome = false) {
     try {
         const response = await fetch(`/api/search?query=${encodeURIComponent(query)}`);
         const result = await response.json();
+        
         if (result.status === 'success') {
-            // Membatasi recentList hanya 4 lagu saja, yang lain tetap 8
             let limit = containerId === 'recentList' ? 4 : (formatType === 'list' ? 4 : 8);
-            let tracks = result.data.slice(0, limit);
+            let tracks = [];
+            
+            // Filter cerdas untuk mencegah lagu duplikat di beranda
+            for (let t of result.data) {
+                if (isHome) {
+                    if (!homeDisplayedVideoIds.has(t.videoId)) {
+                        tracks.push(t);
+                        homeDisplayedVideoIds.add(t.videoId);
+                    }
+                } else {
+                    tracks.push(t);
+                }
+                if (tracks.length >= limit) break;
+            }
+
             let html = '';
             tracks.forEach(t => html += formatType === 'list' ? createListHTML(t) : createCardHTML(t, isArtist));
             document.getElementById(containerId).innerHTML = html;
@@ -291,25 +308,29 @@ async function fetchAndRender(query, containerId, formatType, isArtist = false) 
 }
 
 function loadHomeData() {
-    fetchAndRender('lagu indonesia hits terbaru', 'recentList', 'list');
-    fetchAndRender('lagu pop indonesia rilis terbaru anyar', 'rowAnyar', 'card');
-    fetchAndRender('lagu ceria gembira semangat', 'rowGembira', 'card');
-    fetchAndRender('top 50 indonesia playlist update', 'rowCharts', 'card');
-    fetchAndRender('lagu galau sedih indonesia terpopuler', 'rowGalau', 'card');
-    fetchAndRender('lagu viral terbaru 2026', 'rowBaru', 'card');
-    fetchAndRender('lagu fyp tiktok viral jedag jedug', 'rowTiktok', 'card');
-    fetchAndRender('penyanyi pop indonesia paling hits', 'rowArtists', 'card', true);
+    // Bersihkan memori pelacakan duplikat setiap kali home di-load
+    homeDisplayedVideoIds.clear();
+    
+    fetchAndRender('lagu indonesia hits terbaru', 'recentList', 'list', false, true);
+    fetchAndRender('lagu pop indonesia rilis terbaru anyar', 'rowAnyar', 'card', false, true);
+    fetchAndRender('lagu ceria gembira semangat', 'rowGembira', 'card', false, true);
+    fetchAndRender('top 50 indonesia playlist update', 'rowCharts', 'card', false, true);
+    fetchAndRender('lagu galau sedih indonesia terpopuler', 'rowGalau', 'card', false, true);
+    fetchAndRender('lagu viral terbaru 2026', 'rowBaru', 'card', false, true);
+    fetchAndRender('lagu fyp tiktok viral jedag jedug', 'rowTiktok', 'card', false, true);
+    fetchAndRender('penyanyi pop indonesia paling hits', 'rowArtists', 'card', true, true);
     
     // 3 Kategori Tambahan Baru
-    fetchAndRender('hit terpopuler hari ini', 'rowHitsHariIni', 'card');
-    fetchAndRender('playlist dibuat untuk tiktok', 'rowUntukTiktok', 'card');
-    fetchAndRender('album dan single populer', 'rowAlbumSingle', 'card');
+    fetchAndRender('hit terpopuler hari ini', 'rowHitsHariIni', 'card', false, true);
+    fetchAndRender('playlist dibuat untuk tiktok', 'rowUntukTiktok', 'card', false, true);
+    fetchAndRender('album dan single populer', 'rowAlbumSingle', 'card', false, true);
 }
 
 function renderSearchCategories() {
     const categories = [
         { title: 'Dibuat Untuk Kamu', color: '#8d67ab', img: 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=100&q=80' },
-        { title: 'Rilis Mendatang', color: '#188653', img: 'https://images.unsplash.com/photo-1493225457124-a1a2a5956093?w=100&q=80' },
+        // Memperbaiki link gambar yang rusak pada kategori Rilis Mendatang
+        { title: 'Rilis Mendatang', color: '#188653', img: 'https://images.unsplash.com/photo-1507838153414-b4b713384a76?w=100&q=80' },
         { title: 'Rilis Baru', color: '#739c18', img: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=100&q=80' },
         { title: 'Ramadan', color: '#188653', img: 'https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?w=100&q=80' },
         { title: 'Pop', color: '#477d95', img: 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=100&q=80' },
@@ -343,6 +364,7 @@ document.getElementById('searchInput').addEventListener('input', (e) => {
             const result = await response.json();
             if (result.status === 'success') {
                 let html = '';
+                // Set parameter isHome menjadi false untuk fungsi search
                 result.data.forEach(t => html += createListHTML(t));
                 document.getElementById('searchResults').innerHTML = html;
             }
