@@ -183,7 +183,7 @@ function playMusic(videoId, encodedTrackData, shouldResetContext = true) {
     }
     // Jika panel lirik sedang terbuka, otomatis fetch lirik lagu baru
     if (isLyricsVisible) {
-         fetchLyrics(currentTrack.videoId);
+         fetchLyrics(currentTrack.videoId, currentTrack.title, currentTrack.artist);
     }
 
     // // --- FIX BUG PLAYLIST: Atur konteks putar ---
@@ -778,13 +778,13 @@ function toggleLyricsUI() {
         // Fetch lirik jika lagu sudah diload tapi panel lirik masih "Memuat" atau "Tidak ditemukan"
         const lyricsContent = document.getElementById('lyricsContent');
         if (currentTrack && (lyricsContent.innerText === 'Memuat lirik...' || lyricsContent.innerText === 'Lirik tidak ditemukan.')) {
-            fetchLyrics(currentTrack.videoId);
+            fetchLyrics(currentTrack.videoId, currentTrack.title, currentTrack.artist);
         }
     }
 }
 
 // // --- FITUR LIRIK: Logic Fetch Lirik dari Backend ---
-async function fetchLyrics(videoId) {
+async function fetchLyrics(videoId, trackName, artistName) {
     const lyricsContent = document.getElementById('lyricsContent');
     lyricsContent.innerText = 'Memuat lirik...';
     lyricsContent.style.color = 'rgba(255, 255, 255, 0.7)';
@@ -792,7 +792,8 @@ async function fetchLyrics(videoId) {
     try {
         // backend implementation assumed to be like Spotify format dari library ytmusicapi
         // Endpoint assumed: /api/lyrics?videoId=...
-        const response = await fetch(`/api/lyrics?videoId=${videoId}`);
+        // // --- UPDATE: Kirim parameter pencarian yang lebih kuat ---
+        const response = await fetch(`/api/lyrics?videoId=${videoId}&trackName=${encodeURIComponent(trackName)}&artistName=${encodeURIComponent(artistName)}`);
         const result = await response.json();
         
         // Sesuai library ytmusicapi: lirik mentah biasanya ada di property 'lyrics'
@@ -818,6 +819,16 @@ async function fetchLyrics(videoId) {
         lyricsContent.style.color = 'rgba(255, 255, 255, 0.5)';
     }
 }
+
+// // --- Perbaikan Masalah Masuk Latar Belakang (Background Play) ---
+// Pantau visibilitas halaman. Jika disembunyikan dan sedang diputar, paksa pemutaran ulang.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && isPlaying && ytPlayer) {
+    // Browsers aggressively pause video in background tabs.
+    // Try to force play. This is a bit of a hack and browser-dependent.
+    ytPlayer.playVideo();
+  }
+});
 
 window.onload = () => {
     loadHomeData();
