@@ -1,4 +1,4 @@
-// --- 0. REGISTER PWA & CUSTOM INSTALL BUTTON ---
+// // --- 0. REGISTER PWA & CUSTOM INSTALL BUTTON (Tidak Diubah) ---
 let deferredPrompt;
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
@@ -23,7 +23,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
     }
 });
 
-// --- 1. INDEXEDDB SETUP (SannMusicDB) ---
+// // --- 1. INDEXEDDB SETUP (SannMusicDB) (Tidak Diubah) ---
 let db;
 const request = indexedDB.open("SannMusicDB", 1);
 request.onupgradeneeded = function(e) {
@@ -33,15 +33,27 @@ request.onupgradeneeded = function(e) {
 };
 request.onsuccess = function(e) { db = e.target.result; renderLibraryUI(); };
 
-// --- 2. YOUTUBE IFRAME API & PLAYER LOGIC ---
+// // --- 2. YOUTUBE IFRAME API & PLAYER LOGIC ---
 let ytPlayer;
 let isPlaying = false;
 let currentTrack = null;
 let progressInterval;
 
+// // --- VARIABEL BARU (Untuk Fitur Lirik & Fix Playlist) ---
+let isLyricsVisible = false; // Status panel lirik
+// Konteks putar global: melacak sumber lagu (similar/playlist), index, dan daftar lagu
+let playContext = { type: 'similar', currentIndex: -1, tracks: [] };
+
 function onYouTubeIframeAPIReady() {
     ytPlayer = new YT.Player('youtube-player', {
         height: '0', width: '0',
+        playerVars: {
+            'playsinline': 1, // Penting agar tidak pause saat keluar apk di mobile
+            'controls': 0,
+            'disablekb': 1,
+            'fs': 0,
+            'modestbranding': 1
+        },
         events: {
             'onReady': onPlayerReady,
             'onStateChange': onPlayerStateChange
@@ -51,6 +63,8 @@ function onYouTubeIframeAPIReady() {
 
 function onPlayerReady(event) {
     console.log("YouTube Player is ready");
+    // // --- FITUR LIRIK: Injeksi UI Tombol dan Panel Lirik (Tanpa Ubah HTML Asli) ---
+    injectLyricsUI();
 }
 
 function onPlayerStateChange(event) {
@@ -81,7 +95,8 @@ function onPlayerStateChange(event) {
         stopProgressBar();
         if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'none';
         
-        playNextSimilarSong();
+        // // --- FIX BUG PLAYLIST: Gunakan fungsi central playNextTrack ---
+        playNextTrack();
     }
 }
 
@@ -100,7 +115,35 @@ function updateMediaSession() {
 
         navigator.mediaSession.setActionHandler('play', function() { togglePlay(); });
         navigator.mediaSession.setActionHandler('pause', function() { togglePlay(); });
-        navigator.mediaSession.setActionHandler('nexttrack', function() { playNextSimilarSong(); });
+        // // --- FIX BUG PLAYLIST: Gunakan fungsi central playNextTrack ---
+        navigator.mediaSession.setActionHandler('nexttrack', function() { playNextTrack(); });
+    }
+}
+
+// // --- FUNGSI CENTRAL NEXT TRACK (Fix Playlist Bug) ---
+function playNextTrack() {
+    if (playContext.type === 'playlist' && playContext.tracks.length > 0) {
+        // Mode Playlist: Putar lagu berikutnya sesuai urutan
+        playContext.currentIndex++;
+        if (playContext.currentIndex < playContext.tracks.length) {
+            const nextTrack = playContext.tracks[playContext.currentIndex];
+            // Format data sesuai playMusic
+            const artist = nextTrack.artist ? nextTrack.artist : 'Unknown';
+            let img = nextTrack.thumbnail ? nextTrack.thumbnail : (nextTrack.img ? nextTrack.img : 'https://placehold.co/140x140/282828/FFFFFF?text=Music');
+            img = getHighResImage(img);
+            const trackData = encodeURIComponent(JSON.stringify({videoId: nextTrack.videoId, title: nextTrack.title, artist: artist, img: img}));
+            
+            // Putar tanpa reset konteks (agar tetap di playlist)
+            playMusic(nextTrack.videoId, trackData, false); 
+        } else {
+            // Playlist habis, stop atau loop (opsional, di sini stop)
+            console.log("Playlist ended.");
+            if(ytPlayer) ytPlayer.stopVideo();
+            playContext.currentIndex = -1; // Reset index
+        }
+    } else {
+        // Mode Similar (Default): Gunakan logika sebelumnya
+        playNextSimilarSong();
     }
 }
 
@@ -120,16 +163,37 @@ async function playNextSimilarSong() {
                 const artist = nextTrack.artist ? nextTrack.artist : 'Unknown';
                 const trackData = encodeURIComponent(JSON.stringify({videoId: nextTrack.videoId, title: nextTrack.title, artist: artist, img: img}));
                 
-                playMusic(nextTrack.videoId, trackData);
+                // Mode Similar: Putar lagu dan pastikan konteks reset ke similar
+                playMusic(nextTrack.videoId, trackData, true);
             }
         }
     } catch (error) {}
 }
 
-function playMusic(videoId, encodedTrackData) {
+// // --- UPDATE: playMusic menerima parameter shouldResetContext ---
+function playMusic(videoId, encodedTrackData, shouldResetContext = true) {
     currentTrack = JSON.parse(decodeURIComponent(encodedTrackData));
     checkIfLiked(currentTrack.videoId);
 
+    // // --- FITUR LIRIK: Reset/Fetch Lirik (Tanpa Kurangi Fitur UI Asli) ---
+    const lyricsContent = document.getElementById('lyricsContent');
+    if (lyricsContent) {
+         lyricsContent.innerText = 'Memuat lirik...'; // Reset content
+         lyricsContent.style.color = 'rgba(255, 255, 255, 0.7)';
+    }
+    // Jika panel lirik sedang terbuka, otomatis fetch lirik lagu baru
+    if (isLyricsVisible) {
+         fetchLyrics(currentTrack.videoId);
+    }
+
+    // // --- FIX BUG PLAYLIST: Atur konteks putar ---
+    if (shouldResetContext) {
+        playContext.type = 'similar';
+        playContext.currentIndex = -1;
+        playContext.tracks = [];
+    }
+
+    // // --- UI UPDATE Asli (Tidak Dikurangi) ---
     document.getElementById('miniPlayer').style.display = 'flex';
     document.getElementById('miniPlayerImg').src = currentTrack.img;
     document.getElementById('miniPlayerTitle').innerText = currentTrack.title;
@@ -208,7 +272,7 @@ function seekTo(value) {
     }
 }
 
-// --- CUSTOM TOAST NOTIFICATION ---
+// --- CUSTOM TOAST NOTIFICATION (Tidak Diubah) ---
 let toastTimeout;
 function showToast(message) {
     const toast = document.getElementById('customToast');
@@ -220,7 +284,7 @@ function showToast(message) {
     }, 3000);
 }
 
-// --- 3. SISTEM NAVIGASI ---
+// --- 3. SISTEM NAVIGASI (Tidak Diubah) ---
 function switchView(viewName) {
     document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
     document.getElementById('view-' + viewName).classList.add('active');
@@ -235,7 +299,7 @@ function switchView(viewName) {
     window.scrollTo(0,0);
 }
 
-// --- 4. RENDER KOMPONEN UI ---
+// // --- 4. RENDER KOMPONEN UI ---
 const dotsSvg = '<svg class="dots-icon" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path></svg>';
 
 function getHighResImage(url) {
@@ -246,14 +310,23 @@ function getHighResImage(url) {
     return url;
 }
 
-function createListHTML(track) {
+// // --- UPDATE: createListHTML mendukung mode render berbeda ---
+function createListHTML(track, index = -1, renderMode = 'similar') {
     let img = track.thumbnail ? track.thumbnail : (track.img ? track.img : 'https://placehold.co/48x48/282828/FFFFFF?text=Music');
     img = getHighResImage(img); 
     const artist = track.artist ? track.artist : 'Unknown';
     const trackData = encodeURIComponent(JSON.stringify({videoId: track.videoId, title: track.title, artist: artist, img: img}));
     
+    // Default action: Putar lagu tunggal dan reset konteks ke similar
+    let onclickAction = `playMusic('${track.videoId}', '${trackData}', true)`;
+
+    if (renderMode === 'list' && index !== -1) {
+         // Mode Playlist: Putar lagu dalam konteks daftar (index tercatat)
+         onclickAction = `playTrackFromListContext(${index})`;
+    }
+
     return `
-        <div class="v-item" onclick="playMusic('${track.videoId}', '${trackData}')">
+        <div class="v-item" onclick="${onclickAction}">
             <img src="${img}" class="v-img" onerror="this.src='https://placehold.co/48x48/282828/FFFFFF?text=Music'">
             <div class="v-info">
                 <div class="v-title">${track.title}</div>
@@ -270,7 +343,7 @@ function createCardHTML(track, isArtist = false) {
     const artist = track.artist ? track.artist : 'Unknown';
     const trackData = encodeURIComponent(JSON.stringify({videoId: track.videoId, title: track.title, artist: artist, img: img}));
     
-    const clickAction = isArtist ? `openArtistView('${track.title}')` : `playMusic('${track.videoId}', '${trackData}')`;
+    const clickAction = isArtist ? `openArtistView('${track.title}')` : `playMusic('${track.videoId}', '${trackData}', true)`;
     const imgClass = isArtist ? 'h-img artist-img' : 'h-img';
 
     return `
@@ -306,6 +379,7 @@ async function fetchAndRender(query, containerId, formatType, isArtist = false, 
             }
 
             let html = '';
+            // Mode Render Home/Search: Default 'similar' context
             tracks.forEach(t => html += formatType === 'list' ? createListHTML(t) : createCardHTML(t, isArtist));
             document.getElementById(containerId).innerHTML = html;
         }
@@ -366,6 +440,7 @@ document.getElementById('searchInput').addEventListener('input', (e) => {
             const result = await response.json();
             if (result.status === 'success') {
                 let html = '';
+                // Mode Search: Default 'similar' context
                 result.data.forEach(t => html += createListHTML(t));
                 document.getElementById('searchResults').innerHTML = html;
             }
@@ -383,6 +458,7 @@ async function openArtistView(artistName) {
         const result = await response.json();
         if (result.status === 'success') {
             let html = '';
+            // Mode Artist: Default 'similar' context
             result.data.forEach(track => { html += createListHTML(track); });
             document.getElementById('artistTracksContainer').innerHTML = html;
             
@@ -392,7 +468,8 @@ async function openArtistView(artistName) {
                 img = getHighResImage(img);
                 const artist = firstTrack.artist ? firstTrack.artist : 'Unknown';
                 const trackData = encodeURIComponent(JSON.stringify({videoId: firstTrack.videoId, title: firstTrack.title, artist: artist, img: img}));
-                document.querySelector('.artist-play-btn').setAttribute('onclick', `playMusic('${firstTrack.videoId}', '${trackData}')`);
+                // Mode Artist Play: Default 'similar' context
+                document.querySelector('.artist-play-btn').setAttribute('onclick', `playMusic('${firstTrack.videoId}', '${trackData}', true)`);
             }
         }
     } catch(e) {}
@@ -492,7 +569,7 @@ function renderLibraryUI() {
     };
 }
 
-let currentPlaylistTracks = [];
+let currentPlaylistTracks = []; // Variabel asli dipertahankan
 
 function openPlaylistView(id) {
     switchView('playlist');
@@ -508,7 +585,8 @@ function openPlaylistView(id) {
         req.onsuccess = () => {
             currentPlaylistTracks = req.result;
             document.getElementById('playlistStatsDisplay').innerText = `${req.result.length} lagu disimpan`;
-            renderTracksInPlaylist(req.result);
+            // Mode Playlist Render: 'list' agar onclick support konteks playlist
+            renderTracksInPlaylist(req.result, 'liked');
         };
     } else {
         const tx = db.transaction("playlists", "readonly");
@@ -520,27 +598,60 @@ function openPlaylistView(id) {
             document.getElementById('playlistImageDisplay').src = p.img || 'https://via.placeholder.com/240/282828/ffffff?text=+';
             const trackCount = p.tracks ? p.tracks.length : 0;
             document.getElementById('playlistStatsDisplay').innerText = `${trackCount} lagu disimpan`;
-            renderTracksInPlaylist(p.tracks || []);
+            // Mode Playlist Render: 'list' agar onclick support konteks playlist
+            renderTracksInPlaylist(p.tracks || [], id);
         };
     }
 }
 
+// // --- FIX BUG PLAYLIST: Fungsi central untuk set konteks playlist saat klik lagu ---
+function playTrackFromListContext(index) {
+    if (!currentPlaylistTracks || currentPlaylistTracks.length === 0 || index === -1) return;
+    
+    // Set Konteks Putar Global ke Playlist
+    playContext.type = 'playlist';
+    playContext.tracks = [...currentPlaylistTracks]; // Copy daftar lagu
+    playContext.currentIndex = index;
+
+    const track = playContext.tracks[index];
+    const artist = track.artist ? track.artist : 'Unknown';
+    let img = track.thumbnail ? track.thumbnail : (track.img ? track.img : 'https://placehold.co/140x140/282828/FFFFFF?text=Music');
+    img = getHighResImage(img);
+    const trackData = encodeURIComponent(JSON.stringify({videoId: track.videoId, title: track.title, artist: artist, img: img}));
+    
+    // Putar lagu tanpa reset konteks (false)
+    playMusic(track.videoId, trackData, false);
+}
+
+// // --- FIX BUG PLAYLIST: Tombol play utama di playlist modal ---
 function playFirstPlaylistTrack() {
     if(currentPlaylistTracks && currentPlaylistTracks.length > 0) {
-        const firstTrack = currentPlaylistTracks[0];
-        const trackData = encodeURIComponent(JSON.stringify(firstTrack));
-        playMusic(firstTrack.videoId, trackData);
+        // Set konteks playlist mulai dari index 0
+        playContext.type = 'playlist';
+        playContext.tracks = [...currentPlaylistTracks];
+        playContext.currentIndex = 0;
+
+        const firstTrack = playContext.tracks[0];
+        const artist = firstTrack.artist ? firstTrack.artist : 'Unknown';
+        let img = firstTrack.thumbnail ? firstTrack.thumbnail : (firstTrack.img ? firstTrack.img : 'https://placehold.co/140x140/282828/FFFFFF?text=Music');
+        img = getHighResImage(img);
+        const trackData = encodeURIComponent(JSON.stringify({videoId: firstTrack.videoId, title: firstTrack.title, artist: artist, img: img}));
+        
+        // Putar lagu tanpa reset konteks (false)
+        playMusic(firstTrack.videoId, trackData, false);
     }
 }
 
-function renderTracksInPlaylist(tracks) {
+// // --- UPDATE: renderTracksInPlaylist support mode 'list' ---
+function renderTracksInPlaylist(tracks, playlistId) {
     const container = document.getElementById('playlistTracksContainer');
     if (!tracks || tracks.length === 0) {
         container.innerHTML = '<div style="color:var(--text-sub); text-align:center;">Playlist ini masih kosong.</div>';
         return;
     }
     let html = '';
-    tracks.forEach(t => html += createListHTML(t));
+    // Gunakan mode 'list' dan berikan index agar support track context
+    tracks.forEach((t, i) => html += createListHTML(t, i, 'list'));
     container.innerHTML = html;
 }
 
@@ -613,6 +724,99 @@ function addTrackToPlaylist(playlistId) {
         }
         closeAddToPlaylistModal();
     };
+}
+
+// // --- FITUR LIRIK: Injeksi UI Tombol & Panel (Tanpa Ubah HTML Asli) ---
+function injectLyricsUI() {
+    // 1. Injeksi Panel Lirik ke dalam playerModal
+    const playerModal = document.getElementById('playerModal');
+    if (playerModal && !document.getElementById('lyricsPanel')) {
+        // Gunakan styling inline agar cocok dengan CSS dark mode yang sudah ada
+        const lyricsPanelHTML = `
+            <div id="lyricsPanel" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(18, 18, 18, 0.98); color: white; padding: 100px 24px 140px; overflow-y: auto; display: none; flex-direction: column; align-items: start; gap: 20px; z-index: 5; text-align: left; transition: transform 0.3s ease; transform: translateY(10%);">
+                <h2 style="font-size: 24px; font-weight: 800; margin-bottom: 10px;">Lirik</h2>
+                <div id="lyricsContent" style="font-size: 18px; font-weight: 700; line-height: 1.6; color: rgba(255, 255, 255, 0.7); white-space: pre-wrap;">Memuat lirik...</div>
+            </div>
+        `;
+        // Injeksi di dalam playerModal tetapi sebelum elemen controls utama
+        playerModal.insertAdjacentHTML('beforeend', lyricsPanelHTML);
+    }
+
+    // 2. Injeksi Tombol Lirik ke playback-controls (Samping tombol Like)
+    const controls = document.querySelector('.player-content-wrapper .playback-controls');
+    if (controls && !document.getElementById('btnToggleLyrics')) {
+        // Mikrofon Icon Svg (Warna default redup)
+        const lyricsIconSvg = '<svg id="btnToggleLyrics" viewBox="0 0 24 24" style="fill:rgba(255, 255, 255, 0.5); width:24px; height:24px; cursor:pointer; transition: fill 0.3s ease; margin-left: 16px;"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v1a7 7 0 0 1-14 0v-1H3v1a9 9 0 0 0 8 8.94V22h2v-2.06A9 9 0 0 0 21 11v-1z"></path></svg>';
+        // Masukkan setelah tombol Shuffle atau di urutan yang sesuai
+        controls.insertAdjacentHTML('beforeend', lyricsIconSvg);
+
+        // Tambah Event Listener klik tombol lirik
+        document.getElementById('btnToggleLyrics').addEventListener('click', toggleLyricsUI);
+    }
+}
+
+// // --- FITUR LIRIK: Logic Toggle Panel Lirik ---
+function toggleLyricsUI() {
+    const panel = document.getElementById('lyricsPanel');
+    const icon = document.getElementById('btnToggleLyrics');
+    
+    if (isLyricsVisible) {
+        // Sembunyikan Panel
+        panel.style.display = 'none';
+        panel.style.transform = 'translateY(10%)';
+        icon.style.fill = 'rgba(255, 255, 255, 0.5)'; // Reset warna icon redup
+        isLyricsVisible = false;
+    } else {
+        // Tampilkan Panel
+        panel.style.display = 'flex';
+        requestAnimationFrame(() => {
+            panel.style.transform = 'translateY(0%)'; // Animasi slide up
+        });
+        icon.style.fill = 'white'; // Ganti warna icon jadi putih saat aktif
+        isLyricsVisible = true;
+        
+        // Fetch lirik jika lagu sudah diload tapi panel lirik masih "Memuat" atau "Tidak ditemukan"
+        const lyricsContent = document.getElementById('lyricsContent');
+        if (currentTrack && (lyricsContent.innerText === 'Memuat lirik...' || lyricsContent.innerText === 'Lirik tidak ditemukan.')) {
+            fetchLyrics(currentTrack.videoId);
+        }
+    }
+}
+
+// // --- FITUR LIRIK: Logic Fetch Lirik dari Backend ---
+async function fetchLyrics(videoId) {
+    const lyricsContent = document.getElementById('lyricsContent');
+    lyricsContent.innerText = 'Memuat lirik...';
+    lyricsContent.style.color = 'rgba(255, 255, 255, 0.7)';
+    
+    try {
+        // backend implementation assumed to be like Spotify format dari library ytmusicapi
+        // Endpoint assumed: /api/lyrics?videoId=...
+        const response = await fetch(`/api/lyrics?videoId=${videoId}`);
+        const result = await response.json();
+        
+        // Sesuai library ytmusicapi: lirik mentah biasanya ada di property 'lyrics'
+        if (result && result.lyrics) {
+             lyricsContent.innerText = result.lyrics;
+             lyricsContent.style.color = 'white'; // Putih jika ada lirik asli
+        } else if (typeof result === 'string') {
+            lyricsContent.innerText = result; // Support plain text response
+            lyricsContent.style.color = 'white';
+        } else {
+             // Sesuai Spotify UI jika tidak ada lirik
+             lyricsContent.innerText = 'Lirik tidak ditemukan.';
+             lyricsContent.style.color = 'rgba(255, 255, 255, 0.5)';
+        }
+        
+        // Scroll panel ke paling atas
+        document.getElementById('lyricsPanel').scrollTop = 0;
+        
+    } catch (e) {
+        console.error('Gagal fetch lirik:', e);
+        // Sesuai Spotify UI jika gagal loading
+        lyricsContent.innerText = 'Gagal memuat lirik.';
+        lyricsContent.style.color = 'rgba(255, 255, 255, 0.5)';
+    }
 }
 
 window.onload = () => {
